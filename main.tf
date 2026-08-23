@@ -270,7 +270,14 @@ resource "cloudflare_dns_record" "dmarc" {
   # reporting. Every optional tag is OMITTED when null rather than written with
   # its default value, because a tag that is present pins behaviour, while an
   # absent one inherits whatever the RFC default becomes.
-  content = join("; ", concat(
+  # Wrapped in literal quotes. TXT content is a quoted character-string on the
+  # wire, and Cloudflare adds the quotes when serving whether or not they are
+  # stored, so this changes nothing about what resolvers see (verified by
+  # comparing dig output before and after on a live record). It does clear the
+  # advisory Cloudflare shows against every unquoted TXT record, which otherwise
+  # sits permanently on DKIM, SPF and DMARC and trains people to ignore warnings
+  # on exactly the records where a warning would matter.
+  content = "\"${join("; ", concat(
     ["v=DMARC1", "p=${var.dmarc_policy}"],
     var.dmarc_sp != null ? ["sp=${var.dmarc_sp}"] : [],
     var.dmarc_adkim != null ? ["adkim=${var.dmarc_adkim}"] : [],
@@ -281,7 +288,7 @@ resource "cloudflare_dns_record" "dmarc" {
     var.dmarc_fo != null ? ["fo=${var.dmarc_fo}"] : [],
     var.dmarc_rf != null ? ["rf=${var.dmarc_rf}"] : [],
     var.dmarc_ri != null ? ["ri=${var.dmarc_ri}"] : [],
-  ))
+  ))}\""
 }
 
 # Apex SPF, for a domain declared as a non-sender.
@@ -293,7 +300,10 @@ resource "cloudflare_dns_record" "apex_spf" {
   type    = "TXT"
   ttl     = 1
   comment = "${var.name_prefix}: apex SPF"
-  content = var.apex_spf
+  # Quoted for the same reason as the DMARC record above. Callers pass the bare
+  # policy (e.g. "v=spf1 -all"); the quoting is the module's job so no consumer
+  # has to remember it.
+  content = "\"${var.apex_spf}\""
 }
 
 # Null MX (RFC 7505): states that the domain accepts no mail.
